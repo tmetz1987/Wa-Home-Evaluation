@@ -1,41 +1,22 @@
-// bootstrap.mjs
-// Writes the WA-only valuation app to disk during install, then Next.js builds it.
-// Fix includes RELATIVE imports with .js extensions (no "@/..." alias needed).
-
+// bootstrap.mjs — writes the app files during install
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+const write = (p, c) => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c, "utf8"); };
 
-const write = (path, content) => {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, content, "utf8");
-};
+// Alias support, just in case anything uses "@/..."
+write("jsconfig.json", JSON.stringify({
+  compilerOptions: { baseUrl: ".", paths: { "@/*": ["*"] } }
+}, null, 2));
 
-write(
-  "next.config.mjs",
-  `/** @type {import('next').NextConfig} */
-const nextConfig = {
-  experimental: { serverActions: { allowedOrigins: ["*"] } }
-};
-export default nextConfig;`
-);
+write("next.config.mjs", `/** @type {import('next').NextConfig} */
+const nextConfig = { experimental: { serverActions: { allowedOrigins: ["*"] } } };
+export default nextConfig;`);
 
-write(
-  "postcss.config.js",
-  `module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } };`
-);
+write("postcss.config.js", `module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } };`);
 
-write(
-  "tailwind.config.js",
-  `module.exports = {
-  content: ["./app/**/*.{js,jsx}", "./lib/**/*.{js,jsx}"],
-  theme: { extend: {} },
-  plugins: []
-};`
-);
+write("tailwind.config.js", `module.exports = { content: ["./app/**/*.{js,jsx}", "./lib/**/*.{js,jsx}"], theme: { extend: {} }, plugins: [] };`);
 
-write(
-  "app/globals.css",
-  `@tailwind base;
+write("app/globals.css", `@tailwind base;
 @tailwind components;
 @tailwind utilities;
 :root{color-scheme:light dark}
@@ -44,19 +25,13 @@ body{background:#f9fafb;color:#0b0b0c}
 .card{border-radius:16px;border:1px solid rgba(0,0,0,.08);background:rgba(255,255,255,.9);box-shadow:0 1px 8px rgba(0,0,0,.04)}
 .input{width:100%;border:1px solid rgba(0,0,0,.15);border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.8)}
 .label{font-size:14px;color:#6b7280}
-.badge{display:inline-flex;align-items:center;border:1px solid rgba(0,0,0,.15);padding:2px 10px;border-radius:999px;font-size:12px}`
-);
+.badge{display:inline-flex;align-items:center;border:1px solid rgba(0,0,0,.15);padding:2px 10px;border-radius:999px;font-size:12px}`);
 
-write(
-  "app/layout.js",
-  `import "./globals.css";
+write("app/layout.js", `import "./globals.css";
 export const metadata={title:"WA Home Valuation",description:"Estimate your home value (WA-only beta)"};
-export default function RootLayout({children}){return <html lang="en"><body>{children}</body></html>}`
-);
+export default function RootLayout({children}){return <html lang="en"><body>{children}</body></html>}`);
 
-write(
-  "app/page.js",
-  `"use client";
+write("app/page.js", `"use client";
 import { useState } from "react";
 function currency(n){ return n.toLocaleString(undefined,{style:"currency",currency:"USD",maximumFractionDigits:0}); }
 export default function Page(){
@@ -104,9 +79,8 @@ export default function Page(){
   </main>); }`
 );
 
-write(
-  "app/api/estimate/route.js",
-  `import { NextResponse } from "next/server";
+// API route — uses RELATIVE imports with .js
+write("app/api/estimate/route.js", `import { NextResponse } from "next/server";
 import { z } from "zod";
 import { estimateValue } from "../../lib/valuation.js";
 import { geocodeAddress, fetchSubjectFromEstated, fetchSchoolRating, fetchCompsATTOM } from "../../lib/providers.js";
@@ -158,22 +132,17 @@ export async function POST(req){
   }catch(err){
     return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 400 });
   }
-}`
-);
+}`);
 
-write(
-  "lib/waPpsfBaseline.js",
-  `export const WA_ZIP_PPSF = {
+// Lib files
+write("lib/waPpsfBaseline.js", `export const WA_ZIP_PPSF = {
   "98101": 720, "98102": 680, "98103": 620, "98104": 580, "98105": 650, "98106": 500, "98107": 610, "98108": 480, "98109": 700,
   "98112": 760, "98115": 640, "98116": 660, "98117": 620, "98118": 520, "98119": 740, "98122": 630, "98125": 540, "98126": 560,
   "98012": 430, "98052": 600, "98033": 640, "98004": 950, "98005": 820, "98034": 560, "98027": 650, "98006": 780, "98059": 520,
   "98208": 380, "98201": 360, "98290": 360, "98335": 360, "98402": 340, "99201": 300, "99223": 280, "98801": 280, "99352": 270
-};`
-);
+};`);
 
-write(
-  "lib/valuation.js",
-  `import { WA_ZIP_PPSF } from "./waPpsfBaseline.js";
+write("lib/valuation.js", `import { WA_ZIP_PPSF } from "./waPpsfBaseline.js";
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 const median=a=>{if(!a.length)return 0;const s=[...a].sort((x,y)=>x-y),m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2};
 const currency=n=>n.toLocaleString(undefined,{style:"currency",currency:"USD",maximumFractionDigits:0});
@@ -200,12 +169,9 @@ export function estimateValue(input){
   const low=value*(1-band),high=value*(1+band);br.push("Uncertainty band: ±"+pct(band)+" based on inputs");
   return { estimate:value, low, high, ppsfUsed:ppsf, breakdown:br, subject:{ normalizedAddress: undefined, zipcode: zip } };
 }
-export function extractZip(address){const m=address?.match(/\\b(\\d{5})(?:-\\d{4})?\\b/);return m?m[1]:null}`
-);
+export function extractZip(address){const m=address?.match(/\\b(\\d{5})(?:-\\d{4})?\\b/);return m?m[1]:null}`);
 
-write(
-  "lib/providers.js",
-  `export async function geocodeAddress(address){
+write("lib/providers.js", `export async function geocodeAddress(address){
   if (!process.env.GOOGLE_MAPS_API_KEY) throw new Error("Missing GOOGLE_MAPS_API_KEY");
   const url=new URL("https://maps.googleapis.com/maps/api/geocode/json");
   url.searchParams.set("address",address); url.searchParams.set("key",process.env.GOOGLE_MAPS_API_KEY);
@@ -238,7 +204,5 @@ export async function fetchCompsATTOM(lat,lng,sqft){
   if(sqft){ url.searchParams.set("minbuildingareasqft",String(Math.floor(sqft*0.85))); url.searchParams.set("maxbuildingareasqft",String(Math.ceil(sqft*1.15))); }
   const res=await fetch(url,{headers:{apikey:key},cache:"no-store"}); if(!res.ok) return []; const data=await res.json();
   const sales=data?.sale||data?.sales||[]; return sales.slice(0,12).map(s=>({price:+s.saleamt||0,sqft:+s.buildingareasqft||0,closingDate:s.salerecdate,distanceMiles:+s.distance||undefined})).filter(c=>c.price&&c.sqft);
-}`
-);
-
-console.log("Bootstrap wrote files.");
+}`);
+console.log("bootstrap done");
