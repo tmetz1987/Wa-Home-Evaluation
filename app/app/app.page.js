@@ -129,3 +129,28 @@ return (
           {err && <div style={{color:"#dc2626",fontSize:12}}>{err}</div>}
         </div>
       </div>
+<div className="md:col-span-2 space-y-4">
+        <div className="card p-5">
+          <h2 className="text-base font-semibold mb-3">Estimated value</h2>
+          {!res && <p className="text-sm">Enter your address and details, then tap Estimate.</p>}
+          {res && (
+            <div className="space-y-3">
+              <div className="text-3xl font-bold">{currency(res.estimate)}</div>
+              <div className="text-sm">Range: {currency(res.low)} – {currency(res.high)}</div>
+              <div className="border rounded-xl p-3">
+                <div className="text-xs">Used $/sqft</div>
+                <div className="text-lg font-semibold">{currency(res.ppsfUsed)}/sqft</div>
+              </div>
+              <div className="border rounded-xl p-3 max-h-64 overflow-auto">
+                <div className="text-sm font-medium mb-2">Breakdown</div>
+                <ul className="list-disc pl-5 space-y-1 text-sm">
+                  {res.breakdown?.map((b,i)=>(<li key={i}>{b}</li>))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+          }
