@@ -18,3 +18,37 @@ const InputSchema = z.object({
   marketTrend: z.enum(["declining","flat","rising"]).optional(),
   comps: z.array(z.object({ price: z.number().positive(), sqft: z.number().positive() })).optional()
 });
+export async function POST(req){
+  try{
+    const parsed = InputSchema.parse(await req.json());
+    const geo = await geocodeAddress(parsed.address);
+
+    let { sqft, lotSqft, yearBuilt } = parsed;
+    const subject = await fetchSubjectFromEstated(geo.formatted).catch(()=>null);
+    sqft = sqft || subject?.sqft;
+    lotSqft = lotSqft || subject?.lotSqft;
+    yearBuilt = yearBuilt || subject?.yearBuilt;
+
+    let schoolRating = parsed.schoolRating;
+    if (!schoolRating){ schoolRating = await fetchSchoolRating(geo.lat, geo.lng); }
+
+    let comps = parsed.comps || [];
+    if (comps.length === 0){ comps = await fetchCompsATTOM(geo.lat, geo.lng, sqft); }
+
+    const result = estimateValue({
+      ...parsed,
+      address: geo.formatted,
+      sqft: sqft || 0,
+      lotSqft,
+      yearBuilt,
+      schoolRating,
+      comps,
+      zipcode: geo.zipcode
+    });
+    result.subject = { normalizedAddress: geo.formatted, zipcode: geo.zipcode, county: geo.county, lat: geo.lat, lng: geo.lng, filledSqft: sqft };
+
+    return NextResponse.json(result, { status: 200 });
+  }catch(err){
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 400 });
+  }
+}
