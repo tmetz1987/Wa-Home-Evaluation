@@ -1,21 +1,30 @@
-// bootstrap.mjs — writes the app files during install
-import { mkdirSync, writeFileSync } from "node:fs";
+// bootstrap.mjs — nuke & write fresh app files, then Next builds.
+// This version removes any old /app and /lib folders first.
+// It writes route.js with RELATIVE imports and logs the header to prove it.
+
+import { mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+
 const write = (p, c) => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c, "utf8"); };
 
-// Alias support, just in case anything uses "@/..."
+// 0) Clean any previous generated files (important)
+try { rmSync("app", { recursive: true, force: true }); } catch {}
+try { rmSync("lib", { recursive: true, force: true }); } catch {}
+
+// 1) jsconfig to allow "@/..." just in case (belt & suspenders)
 write("jsconfig.json", JSON.stringify({
-  compilerOptions: { baseUrl: ".", paths: { "@/*": ["*"] } }
+  compilerOptions: { baseUrl: ".", paths: { "@/*": ["./*"] } }
 }, null, 2));
 
+// 2) Minimal Next/Tailwind configs
 write("next.config.mjs", `/** @type {import('next').NextConfig} */
 const nextConfig = { experimental: { serverActions: { allowedOrigins: ["*"] } } };
 export default nextConfig;`);
 
 write("postcss.config.js", `module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } };`);
-
 write("tailwind.config.js", `module.exports = { content: ["./app/**/*.{js,jsx}", "./lib/**/*.{js,jsx}"], theme: { extend: {} }, plugins: [] };`);
 
+// 3) Global CSS + layout
 write("app/globals.css", `@tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -31,6 +40,7 @@ write("app/layout.js", `import "./globals.css";
 export const metadata={title:"WA Home Valuation",description:"Estimate your home value (WA-only beta)"};
 export default function RootLayout({children}){return <html lang="en"><body>{children}</body></html>}`);
 
+// 4) UI page
 write("app/page.js", `"use client";
 import { useState } from "react";
 function currency(n){ return n.toLocaleString(undefined,{style:"currency",currency:"USD",maximumFractionDigits:0}); }
@@ -76,10 +86,9 @@ export default function Page(){
         </div>)}
       </div>
     </div>
-  </main>); }`
-);
+  </main>); }`);
 
-// API route — uses RELATIVE imports with .js
+// 5) API route — RELATIVE imports with .js
 write("app/api/estimate/route.js", `import { NextResponse } from "next/server";
 import { z } from "zod";
 import { estimateValue } from "../../lib/valuation.js";
@@ -134,7 +143,7 @@ export async function POST(req){
   }
 }`);
 
-// Lib files
+// 6) Lib files
 write("lib/waPpsfBaseline.js", `export const WA_ZIP_PPSF = {
   "98101": 720, "98102": 680, "98103": 620, "98104": 580, "98105": 650, "98106": 500, "98107": 610, "98108": 480, "98109": 700,
   "98112": 760, "98115": 640, "98116": 660, "98117": 620, "98118": 520, "98119": 740, "98122": 630, "98125": 540, "98126": 560,
@@ -171,6 +180,7 @@ export function estimateValue(input){
 }
 export function extractZip(address){const m=address?.match(/\\b(\\d{5})(?:-\\d{4})?\\b/);return m?m[1]:null}`);
 
+// 7) Providers
 write("lib/providers.js", `export async function geocodeAddress(address){
   if (!process.env.GOOGLE_MAPS_API_KEY) throw new Error("Missing GOOGLE_MAPS_API_KEY");
   const url=new URL("https://maps.googleapis.com/maps/api/geocode/json");
@@ -205,4 +215,8 @@ export async function fetchCompsATTOM(lat,lng,sqft){
   const res=await fetch(url,{headers:{apikey:key},cache:"no-store"}); if(!res.ok) return []; const data=await res.json();
   const sales=data?.sale||data?.sales||[]; return sales.slice(0,12).map(s=>({price:+s.saleamt||0,sqft:+s.buildingareasqft||0,closingDate:s.salerecdate,distanceMiles:+s.distance||undefined})).filter(c=>c.price&&c.sqft);
 }`);
-console.log("bootstrap done");
+
+// 8) Prove what we wrote (shows in Vercel logs)
+const header = readFileSync("app/api/estimate/route.js","utf8").split("\n").slice(0,6).join("\n");
+console.log("route.js header ->\\n"+header);
+console.log("bootstrap complete");
